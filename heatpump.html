@@ -11,11 +11,6 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.8.2/css/bulma.min.css">
     <script type="text/javascript">
 
-        /**
-         * TODO: Zeiten sind noch UTC in den Messungen
-         * Datum ist teilweise noch US
-         **/
-
         google.charts.load('current', {
             'packages': ['line', 'timeline', 'corechart'], 'language': 'de'
         });
@@ -79,7 +74,7 @@
                     //"Date(2020,4,8,20,8)"
                     timeLastSample = lastSample.c[0].v;
                     timeLastSample = timeLastSample.substring(5, timeLastSample.length - 1);
-                    let lastMeasurement = moment.utc(timeLastSample.split(",")).utcOffset("+0200").format("dddd, Do MMMM YYYY, H:mm");
+                    let lastMeasurement = moment.utc(timeLastSample.split(",")).local().format("dddd, Do MMMM YYYY, H:mm");
 
                     var dateFormatter = new google.visualization.DateFormat({ pattern: 'dd.M HH:mm' });
                     lineChartData = new google.visualization.DataTable(jsonData);
@@ -160,8 +155,8 @@
                             diffHours = 0.5;
                             endDate = moment(endDate).add(30, 'minutes');
                         }
-                        let startDateString = moment.utc(startDate).utcOffset("+0200").format("DD.MM, H:mm");
-                        let endDateString = moment.utc(endDate).utcOffset("+0200").format("DD.MM, H:mm");
+                        let startDateString = moment.utc(startDate).local().format("DD.MM, H:mm");
+                        let endDateString = moment.utc(endDate).local().format("DD.MM, H:mm");
                         $("#duration").html(`Dauer: <strong>${diffHours.toFixed(1)} Stunden</strong> (${startDateString} - ${endDateString})`);
                     });
                     google.visualization.events.addListener(timelineChart, 'onmouseout', function (obj) {
@@ -230,8 +225,7 @@
         }
 
         $(document).ready(function () {
-            const urlParams = new URLSearchParams(window.location.search);
-            startDate = urlParams.get("startDate");
+            startDate = moment().subtract(14, 'days').local().format("YYYY-MM-DD");
             $('#collection').change(function () {
                 resetData();
                 collection = $(this).val();
@@ -247,7 +241,19 @@
                 $('#raw_data_button').hide();
             });
             $('#lineChart').hide();
+
+            $("#dateChooser").change(function(){
+                startDate = $(this).val();
+                resetData();
+                $('#chart_div').text("Loading data...");
+                drawChart();
+                $('#lineChart').hide();
+                $('#raw_data_button').show();
+            });
         });
+
+
+
 
     </script>
 </head>
@@ -279,6 +285,9 @@
     </div>
     <div class="container">
         <div id="timelineChart" style="height: 180px;">Loading data...</div>
+    </div>
+    <div class="container"  style="margin-bottom: 10px;">
+        <input type="date" id="dateChooser"/><span style="padding-left: 10px;">Startdatum ändern (Default 2 Wochen)</span>
     </div>
     <div class="container">
         <button class="button is-info" id="raw_data_button">Zeige Rohdaten...</button>
