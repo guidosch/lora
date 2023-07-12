@@ -59,13 +59,12 @@
                 url: "https://europe-west3-heatpump-monitoring.cloudfunctions.net/doGraphData",
                 crossDomain: true,
                 dataType: "json",
-                async: false,
+                async: true,
                 data: {
                     startDate: startDate,
                     collection: collection
                 }
-            })
-                .done(function (jsonData) {
+            }).done(function (jsonData) {
 
 
                     let lastSample = jsonData.rows[jsonData.rows.length - 1];
@@ -93,6 +92,7 @@
                     let statusText = `Aktueller Status: <strong>${status}</strong>.<br>
                         <span class="content is-small">Vorlauftemperatur Wasser: ${forwardTempLastSample} °C (Letzte Messung: ${lastMeasurement})</span>`;
                     $("#status").html(statusText);
+                    $("#status").show();
 
                     //prepare timeline chart
                     var timelineChart = new google.visualization.Timeline(document.getElementById('timelineChart'));
@@ -166,6 +166,7 @@
                 })
                 .fail(function (e) {
                     console.log("Error calling cloud function: " + e);
+                    $(".notification").show();
                 });
 
         }
@@ -229,10 +230,12 @@
             $('#collection').change(function () {
                 resetData();
                 collection = $(this).val();
-                $('#chart_div').text("Loading data...");
-                drawChart();
+                $('#timelineChart').text("Loading data...");
                 $('#lineChart').hide();
                 $('#raw_data_button').show();
+                $(".notification").hide();
+                $("#status").hide();
+                drawChart();
             });
 
             $("#raw_data_button").click(function () {
@@ -242,13 +245,16 @@
             });
             $('#lineChart').hide();
 
-            $("#dateChooser").change(function(){
+            $("#dateChooser").change(function () {
                 startDate = $(this).val();
                 resetData();
-                $('#chart_div').text("Loading data...");
+                $('#timelineChart').text("Loading data...");
                 drawChart();
                 $('#lineChart').hide();
                 $('#raw_data_button').show();
+            });
+            $(".notification").click(function () {
+               $(this).hide();
             });
         });
 
@@ -260,6 +266,10 @@
 
 <body>
     <div class="container">
+        <div class="notification is-info is-light" style="display:none;">
+            <button class="delete"></button>
+            Keine Daten gefunden. Ev. ist die Batterie leer oder das Geräte ist offline.
+        </div>
         <h3 class="title">Status Heizen/Kühlen T71-T77</h3>
         <p class="content">
             Der Status der Wäremepumpe/Kühlung wird anhand der Temperaturdifferenz der <a target="_blank"
@@ -286,8 +296,9 @@
     <div class="container">
         <div id="timelineChart" style="height: 180px;">Loading data...</div>
     </div>
-    <div class="container"  style="margin-bottom: 10px;">
-        <input type="date" id="dateChooser"/><span style="padding-left: 10px;">Startdatum ändern (Default 2 Wochen)</span>
+    <div class="container" style="margin-bottom: 10px;">
+        <input type="date" id="dateChooser" /><span style="padding-left: 10px;">Startdatum ändern (Default 2
+            Wochen)</span>
     </div>
     <div class="container">
         <button class="button is-info" id="raw_data_button">Zeige Rohdaten...</button>
