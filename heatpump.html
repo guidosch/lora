@@ -66,109 +66,121 @@
                 }
             }).done(function (jsonData) {
 
+                let lastSample = jsonData.rows[jsonData.rows.length - 1];
+                diffLastSample = lastSample.c[3].v;
+                forwardTempLastSample = parseFloat(lastSample.c[1].v);
+                //"Date(2020,4,8,20,8)"
+                timeLastSample = lastSample.c[0].v;
+                timeLastSample = timeLastSample.substring(5, timeLastSample.length - 1);
+                let lastMeasurement = moment.utc(timeLastSample.split(",")).local().format("dddd, Do MMMM YYYY, H:mm");
 
-                    let lastSample = jsonData.rows[jsonData.rows.length - 1];
-                    diffLastSample = lastSample.c[3].v;
-                    forwardTempLastSample = parseFloat(lastSample.c[1].v);
-                    //"Date(2020,4,8,20,8)"
-                    timeLastSample = lastSample.c[0].v;
-                    timeLastSample = timeLastSample.substring(5, timeLastSample.length - 1);
-                    let lastMeasurement = moment.utc(timeLastSample.split(",")).local().format("dddd, Do MMMM YYYY, H:mm");
+                var dateFormatter = new google.visualization.DateFormat({ pattern: 'dd.M HH:mm' });
+                lineChartData = new google.visualization.DataTable(jsonData);
+                dateFormatter.format(lineChartData, 0);
+                lineChart = new google.charts.Line(document.getElementById('lineChart'));
 
-                    var dateFormatter = new google.visualization.DateFormat({ pattern: 'dd.M HH:mm' });
-                    lineChartData = new google.visualization.DataTable(jsonData);
-                    dateFormatter.format(lineChartData, 0);
-                    lineChart = new google.charts.Line(document.getElementById('lineChart'));
+                //is forward temp falling?
+                let fallingForwardTemp = isForwardTempfalling(jsonData);
 
-                    //is forward temp falling?
-                    let fallingForwardTemp = isForwardTempfalling(jsonData);
-
-                    let status = "Standby";
-                    if (diffLastSample > 1.25 && fallingForwardTemp) {
-                        status = "Kühlung läuft";
-                    } else if (diffLastSample < -2) {
-                        status = "Heizung läuft";
-                    }
-                    let statusText = `Aktueller Status: <strong>${status}</strong>.<br>
+                let status = "Standby";
+                if (diffLastSample > 1.25 && fallingForwardTemp) {
+                    status = "Kühlung läuft";
+                } else if (diffLastSample < -2) {
+                    status = "Heizung läuft";
+                }
+                let statusText = `Aktueller Status: <strong>${status}</strong>.<br>
                         <span class="content is-small">Vorlauftemperatur Wasser: ${forwardTempLastSample} °C (Letzte Messung: ${lastMeasurement})</span>`;
-                    $("#status").html(statusText);
-                    $("#status").show();
+                $("#status").html(statusText);
+                $("#status").show();
 
-                    //prepare timeline chart
-                    var timelineChart = new google.visualization.Timeline(document.getElementById('timelineChart'));
-                    var timelineDataTable = new google.visualization.DataTable();
+                //prepare timeline chart
+                var timelineChart = new google.visualization.Timeline(document.getElementById('timelineChart'));
+                var timelineDataTable = new google.visualization.DataTable();
 
-                    timelineDataTable.addColumn({ type: 'string', id: 'Status' });
-                    timelineDataTable.addColumn({ type: 'date', id: 'Start' });
-                    timelineDataTable.addColumn({ type: 'date', id: 'End' });
+                timelineDataTable.addColumn({ type: 'string', id: 'Status' });
+                timelineDataTable.addColumn({ type: 'date', id: 'Start' });
+                timelineDataTable.addColumn({ type: 'date', id: 'End' });
 
-                    //add dummy entries to fix colors and ordering
-                    addDummyEntries(jsonData)
+                //add dummy entries to fix colors and ordering
+                addDummyEntries(jsonData)
 
-                    // a row {"c":[{"v":"Date(2020,3,1,8,16)"},{"v":19.3},{"v":23.3},{"v":4}]},
-                    // date, forward, return, diff (forward-return)
-                    let lastForward = 0;
-                    jsonData.rows.forEach(row => {
-                        let forwardTemp = row.c[1].v;
-                        let returnTemp = row.c[2].v;
-                        let diff = row.c[3].v;
-                        let date = row.c[0].v;
-                        if ((diff >= 2 && forwardTemp < 21) || (diff > 1.25 && (lastForward - forwardTemp >= 0) && forwardTemp < 20 && returnTemp < 21)) {
-                            addToTimeline("Kühlung", date);
-                        } else if (diff < -2) {
-                            addToTimeline("Heizung", date);
-                        } else {
-                            addToTimeline("Standby", date);
-                        }
-                        lastForward = forwardTemp;
-                    });
-                    addToTimeline("End", new Date());
+                // a row {"c":[{"v":"Date(2020,3,1,8,16)"},{"v":19.3},{"v":23.3},{"v":4}]},
+                // date, forward, return, diff (forward-return)
+                let lastForward = 0;
+                jsonData.rows.forEach(row => {
+                    let forwardTemp = row.c[1].v;
+                    let returnTemp = row.c[2].v;
+                    let diff = row.c[3].v;
+                    let date = row.c[0].v;
+                    if (checkCooling(diff, forwardTemp, returnTemp)) {
+                        addToTimeline("Kühlung", date);
+                    } else if (diff < -2) {
+                        addToTimeline("Heizung", date);
+                    } else {
+                        addToTimeline("Standby", date);
+                    }
+                    lastForward = forwardTemp;
+                });
+                addToTimeline("End", new Date());
 
-                    var timelineOptions = {
-                        width: 900,
-                        height: 500,
-                        legend: { position: 'none' },
-                        hAxis: {
-                            format: 'dd.M',
-                        },
-                        colors: ['#039c2e', '#c41c10', '#1d62d1']
-                    };
+                var timelineOptions = {
+                    width: 900,
+                    height: 500,
+                    legend: { position: 'none' },
+                    hAxis: {
+                        format: 'dd.M',
+                    },
+                    colors: ['#039c2e', '#c41c10', '#1d62d1']
+                };
 
 
-                    let wrap = [];
-                    wrap.push(timelineRows);
-                    timelineDataTable.addRows(timelineRows);
+                let wrap = [];
+                wrap.push(timelineRows);
+                timelineDataTable.addRows(timelineRows);
 
-                    dateFormatter.format(timelineDataTable, 0);
+                dateFormatter.format(timelineDataTable, 0);
 
-                    timelineChart.draw(timelineDataTable, timelineOptions);
+                timelineChart.draw(timelineDataTable, timelineOptions);
 
-                    google.visualization.events.addListener(timelineChart, 'onmouseover', function (obj) {
+                google.visualization.events.addListener(timelineChart, 'onmouseover', function (obj) {
 
-                        let startDate = timelineDataTable.getValue(obj.row, 1);
-                        let endDate = timelineDataTable.getValue(obj.row, 2);
-                        let timeDiff = Math.abs(startDate.getTime() - endDate.getTime());
-                        let diffHours = (timeDiff / (1000 * 3600));
+                    let startDate = timelineDataTable.getValue(obj.row, 1);
+                    let endDate = timelineDataTable.getValue(obj.row, 2);
+                    let timeDiff = Math.abs(startDate.getTime() - endDate.getTime());
+                    let diffHours = (timeDiff / (1000 * 3600));
 
-                        if (diffHours == 0) {
-                            //Measurement is taken every 30min, so rounding up to 30min
-                            diffHours = 0.5;
-                            endDate = moment(endDate).add(30, 'minutes');
-                        }
-                        let startDateString = moment.utc(startDate).local().format("DD.MM, H:mm");
-                        let endDateString = moment.utc(endDate).local().format("DD.MM, H:mm");
-                        $("#duration").html(`Dauer: <strong>${diffHours.toFixed(1)} Stunden</strong> (${startDateString} - ${endDateString})`);
-                    });
-                    google.visualization.events.addListener(timelineChart, 'onmouseout', function (obj) {
-                        $("#duration").html("&nbsp;");
-                    });
+                    if (diffHours == 0) {
+                        //Measurement is taken every 30min, so rounding up to 30min
+                        diffHours = 0.5;
+                        endDate = moment(endDate).add(30, 'minutes');
+                    }
+                    let startDateString = moment.utc(startDate).local().format("DD.MM, H:mm");
+                    let endDateString = moment.utc(endDate).local().format("DD.MM, H:mm");
+                    $("#duration").html(`Dauer: <strong>${diffHours.toFixed(1)} Stunden</strong> (${startDateString} - ${endDateString})`);
+                });
+                google.visualization.events.addListener(timelineChart, 'onmouseout', function (obj) {
+                    $("#duration").html("&nbsp;");
+                });
 
-                })
+            })
                 .fail(function (e) {
                     console.log("Error calling cloud function: " + e);
                     $(".notification").show();
                 });
 
+        }
+
+        function checkCooling(diff, forwardTemp, returnTemp) {
+            let currentMonth = moment().month(); //start with 0 --> Jan
+            let coolingPeriod = (currentMonth >= 5 && currentMonth <= 8)
+             
+            if ((diff >= 2 && forwardTemp < 21) ||
+                (diff > 1.25 && (lastForward - forwardTemp >= 0) &&
+                    forwardTemp < 20 &&
+                    returnTemp < 21)) {
+                return true && coolingPeriod;
+            }
+            return false;
         }
 
         //[ 'Heizung', new Date(1789, 3, 30), new Date(1797, 2, 4) ],
@@ -254,7 +266,7 @@
                 $('#raw_data_button').show();
             });
             $(".notification").click(function () {
-               $(this).hide();
+                $(this).hide();
             });
         });
 
