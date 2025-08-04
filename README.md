@@ -1,10 +1,10 @@
 # LORA data to Google Chart
 
-Using Google cloud functions to publish [LORA](https://en.wikipedia.org/wiki/LoRa) data to a firestore database and also offer the data over a second cloud function to be visualized in a chart. Data is recoreded with a LORA module and sent to the things network and there forwared to a the Google Cloud Function.
+Using Google cloud functions to publish [LORA](https://en.wikipedia.org/wiki/LoRa) data to a firestore database and also offer the data over a second cloud function to be visualized in a chart. Data is recoreded with a LORA module and sent to the things network and there forwared to a Google Cloud Function.
 
 ## Dataflow
 
-1. Recodring data with a [Arduino MKRWAN 1310](https://www.arduino.cc/en/Guide/MKRWAN1310) LORA modul and sending over [TTN network](https://www.thethingsnetwork.org/)
+1. Recoding data with a [Arduino MKRWAN 1310](https://www.arduino.cc/en/Guide/MKRWAN1310) LORA modul and sending over [TTN network](https://www.thethingsnetwork.org/)
 2. Using TTN [HTTP integration](hhttps://www.thethingsindustries.com/docs) to forward TTN data to my Google [Cloud Function](https://console.cloud.google.com/functions/list?project=bikecounter)
 3. Google Cloud Function pushes data from TTN to a firestore database.
 4. Using a second Google Cloud Function to offer an API which can be used with [Google Chart API](https://developers.google.com/chart/interactive/docs).
