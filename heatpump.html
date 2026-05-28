@@ -172,7 +172,7 @@
 
         function checkCooling(diff, forwardTemp, returnTemp, lastForward) {
             let currentMonth = moment().month(); //start with 0 --> Jan
-            let coolingPeriod = (currentMonth >= 5 && currentMonth <= 8)
+            let coolingPeriod = (currentMonth >= 4 && currentMonth <= 8)
              
             if ((diff >= 2 && forwardTemp < 21) ||
                 (diff > 1.25 && (lastForward - forwardTemp >= 0) &&
