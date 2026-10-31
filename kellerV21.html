@@ -1,32 +1,82 @@
 <html>
 
 <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Keller V 2.1 Monitoring</title>
     <link rel="stylesheet" type="text/css" href="styles.css" />
     <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
     <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/locale/de.js"></script>
     <script type="text/javascript">
-
         google.charts.load('current', { 'packages': ['corechart', 'line'] });
         google.charts.setOnLoadCallback(drawChart);
+
         var query = "";
         var collection = "humidity";
 
+        var collectionLabels = {
+            humidity: 'Luftfeuchtigkeit',
+            temperature: 'Temperatur',
+            relayIsPowered: 'Relais Status'
+        };
+
+        var collectionColors = {
+            humidity: '#2563eb',
+            temperature: '#f59e0b',
+            relayIsPowered: '#10b981'
+        };
+
         var options = {
             title: 'Messwerte Luft Keller V 2.1',
-            width: 600,
-            height: 340,
+            width: '100%',
+            height: 360,
+            legend: { position: 'bottom' },
+            chartArea: {
+                left: 35,
+                top: 20,
+                right: 18,
+                bottom: 40,
+                width: '100%',
+                height: '70%'
+            },
             hAxis: {
-                title: 'Monitoring Keller V 2.1'
+                title: 'Zeit',
+                gridlines: { count: 6 }
+            },
+            vAxis: {
+                title: 'Wert'
+            },
+            colors: ['#2563eb'],
+            pointSize: 3,
+            lineWidth: 2
+        };
+
+        function formatCollectionValue(metric, value) {
+            if (value === null || value === undefined || value === '') {
+                return '–';
             }
+
+            if (metric === 'relayIsPowered') {
+                return Number(value) > 0 ? 'An' : 'Aus';
+            }
+
+            var numericValue = Number(value);
+            if (isNaN(numericValue)) {
+                return value;
+            }
+
+            var decimals = metric === 'temperature' ? 1 : 0;
+            var unit = metric === 'temperature' ? '°C' : '%';
+            return numericValue.toFixed(decimals) + unit;
         }
 
         function drawChart() {
             var jsonData = $.ajax({
-                url: "https://europe-west3-kellerv21monitor-275419.cloudfunctions.net/printGraphData",
+                url: 'https://europe-west3-kellerv21monitor-275419.cloudfunctions.net/printGraphData',
                 crossDomain: true,
-                dataType: "json",
+                dataType: 'json',
                 async: false,
                 data: {
                     q: query,
@@ -37,65 +87,142 @@
             var data = new google.visualization.DataTable(jsonData);
             var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
             chart.draw(data, options);
+            loadLatestValues();
+        }
+
+        function loadLatestValues() {
+            var metrics = ['humidity', 'temperature', 'relayIsPowered'];
+            var rows = '';
+
+            $.each(metrics, function(index, metric) {
+                var response = $.ajax({
+                    url: 'https://europe-west3-kellerv21monitor-275419.cloudfunctions.net/printGraphData',
+                    crossDomain: true,
+                    dataType: 'json',
+                    async: false,
+                    data: {
+                        q: query,
+                        collection: metric
+                    }
+                });
+
+                var json = response.responseJSON || $.parseJSON(response.responseText || '{}');
+                var data = new google.visualization.DataTable(json);
+                var rowCount = data.getNumberOfRows();
+                var latestRow = rowCount > 0 ? rowCount - 1 : null;
+                var latestValue = latestRow !== null ? data.getValue(latestRow, 1) : null;
+                var latestDate = latestRow !== null ? data.getValue(latestRow, 0) : null;
+
+                rows += '<tr>' +
+                    '<th scope="row"><span class="metric-pill"><span class="metric-dot" style="background: ' + collectionColors[metric] + ';" aria-hidden="true"></span>' + collectionLabels[metric] + '</span></th>' +
+                    '<td>' + formatCollectionValue(metric, latestValue) + '</td>' +
+                    '<td>' + (latestDate ? moment(latestDate).format('DD.MM.YYYY HH:mm') : '–') + '</td>' +
+                    '</tr>';
+            });
+
+            $('#latest-values tbody').html(rows);
         }
 
         function setBackButtonText(text) {
-            $("#back").text(text);
+            $('#back').text(text || '');
         }
 
         function setForwardButtonText(text) {
-            $("#forward").text(text);
-
+            $('#forward').text(text || '');
         }
 
         $(document).ready(function () {
-            $("#back").click(function name() {
+            $(window).resize(function () {
+                if (google && google.visualization) {
+                    drawChart();
+                }
+            });
+
+            $('#back').click(function () {
                 if (query) {
-                    query = moment(new Date(query)).subtract(1, 'month').format("YYYY-MM-DD");
-                    setBackButtonText(moment(new Date(query)).format("MMMM"));
+                    query = moment(new Date(query)).subtract(1, 'month').format('YYYY-MM-DD');
+                    setBackButtonText(moment(new Date(query)).format('MMMM'));
                 } else {
-                    setBackButtonText(moment(new Date()).subtract(2, 'month').format("MMMM"));
-                    setForwardButtonText(moment(new Date()).add(1, 'month').format("MMMM"));
-                    query = moment(new Date()).subtract(1, 'month').format("YYYY-MM-DD");
+                    setBackButtonText(moment(new Date()).subtract(2, 'month').format('MMMM'));
+                    setForwardButtonText(moment(new Date()).add(1, 'month').format('MMMM'));
+                    query = moment(new Date()).subtract(1, 'month').format('YYYY-MM-DD');
                 }
                 drawChart();
             });
 
-            $("#forward").click(function name(params) {
-                query = moment(new Date(query)).add(1, 'month').format("YYYY-MM-DD");
-                setForwardButtonText(moment(new Date(query)).format("MMMM")),
+            $('#forward').click(function () {
+                query = moment(new Date(query)).add(1, 'month').format('YYYY-MM-DD');
+                setForwardButtonText(moment(new Date(query)).format('MMMM'));
                 drawChart();
             });
-            $("#recent").click(function name(params) {
-                query = "";
-                setBackButtonText(moment(new Date()).subtract(1, 'month').format("MMMM"))
-                setForwardButtonText(""),
+
+            $('#recent').click(function () {
+                query = '';
+                setBackButtonText(moment(new Date()).subtract(1, 'month').format('MMMM'));
+                setForwardButtonText('');
                 drawChart();
             });
-            setBackButtonText(moment(new Date()).subtract(1, 'month').format("MMMM"));
-            $('#collection').change(function() {
+
+            setBackButtonText(moment(new Date()).subtract(1, 'month').format('MMMM'));
+
+            $('#collection').change(function () {
                 collection = $(this).val();
-                $('#chart_div').text("Loading data...");
+                $('#chart_div').html('<span class="loading-indicator">Lade Daten...</span>');
                 drawChart();
             });
 
+            loadLatestValues();
         });
-
     </script>
 </head>
 
 <body>
-    <div>
-        <select id="collection">
-            <option value="humidity" selected> Luftfeuchtigkeit</option>
-            <option value="temperature">Temperatur</option>
-            <option value="relayIsPowered">Relais Status</option>
-          </select>&nbsp;Messwert
+    <div class="page-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Keller V 2.1</p>
+                <h1>Raumklima</h1>
+            </div>
+
+            <div class="controls">
+                <label class="select-wrap" for="collection">
+                    <span>Messwert</span>
+                    <select id="collection">
+                        <option value="humidity" selected>Luftfeuchtigkeit</option>
+                        <option value="temperature">Temperatur</option>
+                        <option value="relayIsPowered">Relais Status</option>
+                    </select>
+                </label>
+            </div>
+        </header>
+
+        <section class="panel chart-card">
+            <div class="chart-toolbar" aria-label="Monatsnavigation">
+                <button id="back" class="nav-btn" type="button" aria-label="Vorheriger Monat"></button>
+                <button id="recent" class="secondary-btn" type="button">Aktueller Monat</button>
+                <button id="forward" class="nav-btn" type="button" aria-label="Nächster Monat"></button>
+            </div>
+
+            <div id="chart_div" class="chart-wrap"><span class="loading-indicator">Lade Daten...</span></div>
+        </section>
+
+        <section class="panel table-card">
+            <div class="table-header">
+                <h2>Letzte Messwerte</h2>
+            </div>
+
+            <table id="latest-values">
+                <thead>
+                    <tr>
+                        <th scope="col">Messwert</th>
+                        <th scope="col">Aktuell</th>
+                        <th scope="col">Zuletzt aktualisiert</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
     </div>
-    <div id="chart_div"><span style="padding-top: 1%;">Loading data....</span></div>
-    <button style="margin-left: 225px;" id="back"></button>
-    <button style="margin-left: 1em;" id="recent">Aktueller Monat</button>
-    <button style="margin-left: 1em;" id="forward"></button>
 </body>
 
 </html>
