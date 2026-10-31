@@ -28,30 +28,65 @@
             relayIsPowered: '#10b981'
         };
 
-        var options = {
-            title: 'Messwerte Luft Keller V 2.1',
-            width: '100%',
-            height: 360,
-            legend: { position: 'bottom' },
-            chartArea: {
-                left: 35,
-                top: 20,
-                right: 18,
-                bottom: 40,
-                width: '100%',
-                height: '70%'
-            },
-            hAxis: {
+        function getChartOptions() {
+            var hAxis = {
                 title: 'Zeit',
+                format: 'dd.MM.yyyy',
+                gridlines: { count: 6 },
+                slantedText: true,
+                slantedTextAngle: 35
+            };
+
+            var vAxis = {
+                title: collection === 'temperature' ? 'Temperatur (°C)' : collection === 'humidity' ? 'Luftfeuchtigkeit (%)' : 'Relais (0/1)',
                 gridlines: { count: 6 }
-            },
-            vAxis: {
-                title: 'Wert'
-            },
-            colors: ['#2563eb'],
-            pointSize: 3,
-            lineWidth: 2
-        };
+            };
+
+            if (collection === 'humidity') {
+                vAxis.viewWindow = { min: 20, max: 80 };
+                vAxis.ticks = [20, 30, 40, 50, 60, 70, 80];
+            } else if (collection === 'temperature') {
+                vAxis.viewWindow = { min: 0, max: 40 };
+                vAxis.ticks = [0, 5, 10, 15, 20, 25, 30, 35, 40];
+            } else {
+                vAxis.viewWindow = { min: 0, max: 1.2 };
+                vAxis.ticks = [0, 0.25, 0.5, 0.75, 1, 1.2];
+            }
+
+            return {
+                title: 'Messwerte ' + collectionLabels[collection] + ' Keller V 2.1',
+                width: '100%',
+                height: 360,
+                legend: { position: 'bottom' },
+                chartArea: {
+                    left: 50,
+                    top: 20,
+                    right: 18,
+                    bottom: 60,
+                    width: '100%',
+                    height: '70%'
+                },
+                hAxis: hAxis,
+                vAxis: vAxis,
+                colors: [collectionColors[collection]],
+                pointSize: 3,
+                lineWidth: 2,
+                animation: { duration: 300, easing: 'inAndOut' }
+            };
+        }
+
+        function normalizeDateColumn(data) {
+            if (data.getNumberOfColumns() < 2) {
+                return;
+            }
+
+            for (var i = 0; i < data.getNumberOfRows(); i++) {
+                var rawDate = data.getValue(i, 0);
+                if (rawDate && !(rawDate instanceof Date) && !isNaN(new Date(rawDate).getTime())) {
+                    data.setValue(i, 0, new Date(rawDate));
+                }
+            }
+        }
 
         function formatCollectionValue(metric, value) {
             if (value === null || value === undefined || value === '') {
@@ -85,8 +120,9 @@
             }).responseText;
 
             var data = new google.visualization.DataTable(jsonData);
+            normalizeDateColumn(data);
             var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
-            chart.draw(data, options);
+            chart.draw(data, getChartOptions());
             loadLatestValues();
         }
 
@@ -108,6 +144,7 @@
 
                 var json = response.responseJSON || $.parseJSON(response.responseText || '{}');
                 var data = new google.visualization.DataTable(json);
+                normalizeDateColumn(data);
                 var rowCount = data.getNumberOfRows();
                 var latestRow = rowCount > 0 ? rowCount - 1 : null;
                 var latestValue = latestRow !== null ? data.getValue(latestRow, 1) : null;
