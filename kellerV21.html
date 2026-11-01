@@ -9,12 +9,53 @@
     <script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/moment.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.24.0/locale/de.js"></script>
+    <style>
+        .backend-loading {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(37, 99, 235, 0.08);
+            border: 1px solid rgba(37, 99, 235, 0.2);
+            color: #1d4ed8;
+            font-size: 0.82rem;
+            font-weight: 600;
+            margin-right: 12px;
+            min-height: 40px;
+            box-sizing: border-box;
+        }
+
+        .backend-loading[hidden] {
+            display: none;
+        }
+
+        .backend-loading .loading-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #2563eb;
+            animation: backend-loading-pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes backend-loading-pulse {
+            0%, 100% {
+                transform: scale(0.9);
+                opacity: 0.6;
+            }
+            50% {
+                transform: scale(1.2);
+                opacity: 1;
+            }
+        }
+    </style>
     <script type="text/javascript">
         google.charts.load('current', { 'packages': ['corechart', 'line'] });
         google.charts.setOnLoadCallback(drawChart);
 
         var query = "";
         var collection = "humidity";
+        var activeBackendRequests = 0;
 
         var collectionLabels = {
             humidity: 'Luftfeuchtigkeit',
@@ -27,6 +68,22 @@
             temperature: '#f59e0b',
             relayIsPowered: '#10b981'
         };
+
+        function setBackendLoading(isLoading) {
+            $('#backend-loading').prop('hidden', !isLoading);
+        }
+
+        function beginBackendRequest() {
+            activeBackendRequests += 1;
+            setBackendLoading(true);
+        }
+
+        function endBackendRequest() {
+            activeBackendRequests = Math.max(0, activeBackendRequests - 1);
+            if (activeBackendRequests === 0) {
+                setBackendLoading(false);
+            }
+        }
 
         function getChartOptions() {
             var hAxis = {
@@ -108,22 +165,26 @@
         }
 
         function drawChart() {
-            var jsonData = $.ajax({
+            beginBackendRequest();
+            $.ajax({
                 url: 'https://europe-west3-kellerv21monitor-275419.cloudfunctions.net/printGraphData',
                 crossDomain: true,
                 dataType: 'json',
-                async: false,
                 data: {
                     q: query,
                     collection: collection
                 }
-            }).responseText;
-
-            var data = new google.visualization.DataTable(jsonData);
-            normalizeDateColumn(data);
-            var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
-            chart.draw(data, getChartOptions());
-            loadLatestValues();
+            }).done(function (jsonData) {
+                var data = new google.visualization.DataTable(jsonData);
+                normalizeDateColumn(data);
+                var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+                chart.draw(data, getChartOptions());
+                loadLatestValues();
+            }).fail(function () {
+                $('#chart_div').html('<span class="loading-indicator">Daten konnten nicht geladen werden.</span>');
+            }).always(function () {
+                endBackendRequest();
+            });
         }
 
         function loadLatestValues() {
@@ -131,33 +192,41 @@
             var rows = '';
 
             $.each(metrics, function(index, metric) {
-                var response = $.ajax({
+                beginBackendRequest();
+                $.ajax({
                     url: 'https://europe-west3-kellerv21monitor-275419.cloudfunctions.net/printGraphData',
                     crossDomain: true,
                     dataType: 'json',
-                    async: false,
                     data: {
                         q: query,
                         collection: metric
                     }
+                }).done(function (json) {
+                    var data = new google.visualization.DataTable(json);
+                    normalizeDateColumn(data);
+                    var rowCount = data.getNumberOfRows();
+                    var latestRow = rowCount > 0 ? rowCount - 1 : null;
+                    var latestValue = latestRow !== null ? data.getValue(latestRow, 1) : null;
+                    var latestDate = latestRow !== null ? data.getValue(latestRow, 0) : null;
+
+                    rows += '<tr>' +
+                        '<th scope="row"><span class="metric-pill"><span class="metric-dot" style="background: ' + collectionColors[metric] + ';" aria-hidden="true"></span>' + collectionLabels[metric] + '</span></th>' +
+                        '<td>' + formatCollectionValue(metric, latestValue) + '</td>' +
+                        '<td>' + (latestDate ? moment(latestDate).format('DD.MM.YYYY HH:mm') : '–') + '</td>' +
+                        '</tr>';
+                }).fail(function () {
+                    rows += '<tr>' +
+                        '<th scope="row"><span class="metric-pill"><span class="metric-dot" style="background: ' + collectionColors[metric] + ';" aria-hidden="true"></span>' + collectionLabels[metric] + '</span></th>' +
+                        '<td>–</td>' +
+                        '<td>–</td>' +
+                        '</tr>';
+                }).always(function () {
+                    endBackendRequest();
+                    if (index === metrics.length - 1) {
+                        $('#latest-values tbody').html(rows);
+                    }
                 });
-
-                var json = response.responseJSON || $.parseJSON(response.responseText || '{}');
-                var data = new google.visualization.DataTable(json);
-                normalizeDateColumn(data);
-                var rowCount = data.getNumberOfRows();
-                var latestRow = rowCount > 0 ? rowCount - 1 : null;
-                var latestValue = latestRow !== null ? data.getValue(latestRow, 1) : null;
-                var latestDate = latestRow !== null ? data.getValue(latestRow, 0) : null;
-
-                rows += '<tr>' +
-                    '<th scope="row"><span class="metric-pill"><span class="metric-dot" style="background: ' + collectionColors[metric] + ';" aria-hidden="true"></span>' + collectionLabels[metric] + '</span></th>' +
-                    '<td>' + formatCollectionValue(metric, latestValue) + '</td>' +
-                    '<td>' + (latestDate ? moment(latestDate).format('DD.MM.YYYY HH:mm') : '–') + '</td>' +
-                    '</tr>';
             });
-
-            $('#latest-values tbody').html(rows);
         }
 
         function setBackButtonText(text) {
@@ -222,6 +291,10 @@
             </div>
 
             <div class="controls">
+                <div id="backend-loading" class="backend-loading" hidden aria-live="polite">
+                    <span class="loading-dot" aria-hidden="true"></span>
+                    <span>Daten werden geladen...</span>
+                </div>
                 <label class="select-wrap" for="collection">
                     <span>Messwert</span>
                     <select id="collection">
