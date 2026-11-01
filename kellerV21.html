@@ -86,12 +86,14 @@
         }
 
         function getChartOptions() {
+            var slantDates = $(window).width() < 900;
+
             var hAxis = {
                 title: 'Zeit',
                 format: 'dd.MM.yyyy',
                 gridlines: { count: 6 },
-                slantedText: true,
-                slantedTextAngle: 35
+                slantedText: slantDates,
+                slantedTextAngle: slantDates ? 35 : 0
             };
 
             var vAxis = {
