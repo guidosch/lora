@@ -86,18 +86,24 @@
         }
 
         function getChartOptions() {
-            var slantDates = $(window).width() < 900;
+            var isCompact = $(window).width() < 720;
 
             var hAxis = {
                 format: 'dd.MM.yyyy',
-                gridlines: { count: 6 },
-                slantedText: slantDates,
-                slantedTextAngle: slantDates ? 35 : 0
+                gridlines: { count: isCompact ? 4 : 6 },
+                slantedText: isCompact,
+                slantedTextAngle: isCompact ? 45 : 0,
+                textStyle: {
+                    fontSize: isCompact ? 10 : 12
+                }
             };
 
             var vAxis = {
                 title: collection === 'temperature' ? 'Temperatur (°C)' : collection === 'humidity' ? 'Luftfeuchtigkeit (%)' : 'Relais (0/1)',
-                gridlines: { count: 6 }
+                gridlines: { count: 6 },
+                textStyle: {
+                    fontSize: isCompact ? 10 : 12
+                }
             };
 
             if (collection === 'humidity') {
@@ -113,15 +119,15 @@
 
             return {
                 width: '100%',
-                height: 360,
+                height: isCompact ? 300 : 360,
                 legend: { position: 'bottom' },
                 chartArea: {
-                    left: 50,
-                    top: 20,
-                    right: 18,
-                    bottom: 40,
+                    left: isCompact ? 35 : 50,
+                    top: 10,
+                    right: 12,
+                    bottom: isCompact ? 25 : 40,
                     width: '100%',
-                    height: '75%'
+                    height: '80%'
                 },
                 hAxis: hAxis,
                 vAxis: vAxis,
