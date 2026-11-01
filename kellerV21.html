@@ -30,6 +30,17 @@
             display: none;
         }
 
+        .nav-btn:disabled {
+            visibility: hidden;
+        }
+
+        .period-label {
+            margin: 0 0 10px;
+            text-align: center;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
         .backend-loading .loading-dot {
             width: 8px;
             height: 8px;
@@ -56,6 +67,11 @@
         var query = "";
         var collection = "humidity";
         var activeBackendRequests = 0;
+        // 0 = recent data, -1 = one month back, -2 = two months back, ...
+        var monthOffset = 0;
+        var chartRequestId = 0;
+        var chart = null;
+        var chartData = null;
 
         var collectionLabels = {
             humidity: 'Luftfeuchtigkeit',
@@ -89,7 +105,7 @@
             var isCompact = $(window).width() < 720;
 
             var hAxis = {
-                format: 'dd.MM.yyyy',
+                format: 'dd.MM HH:mm',
                 gridlines: { count: isCompact ? 4 : 6 },
                 slantedText: isCompact,
                 slantedTextAngle: isCompact ? 45 : 0,
@@ -170,7 +186,20 @@
             return numericValue.toFixed(decimals) + unit;
         }
 
+        function renderChart() {
+            if (!chartData) {
+                return;
+            }
+            if (!chart) {
+                chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+            }
+            chart.draw(chartData, getChartOptions());
+        }
+
         function drawChart() {
+            // Only the response of the latest request may update the chart,
+            // otherwise fast clicking can show an older month.
+            var requestId = ++chartRequestId;
             beginBackendRequest();
             $.ajax({
                 url: 'https://europe-west3-kellerv21monitor-275419.cloudfunctions.net/printGraphData',
@@ -181,12 +210,18 @@
                     collection: collection
                 }
             }).done(function (jsonData) {
-                var data = new google.visualization.DataTable(jsonData);
-                normalizeDateColumn(data);
-                var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
-                chart.draw(data, getChartOptions());
-                loadLatestValues();
+                if (requestId !== chartRequestId) {
+                    return;
+                }
+                chartData = new google.visualization.DataTable(jsonData);
+                normalizeDateColumn(chartData);
+                renderChart();
             }).fail(function () {
+                if (requestId !== chartRequestId) {
+                    return;
+                }
+                chart = null;
+                chartData = null;
                 $('#chart_div').html('<span class="loading-indicator">Daten konnten nicht geladen werden.</span>');
             }).always(function () {
                 endBackendRequest();
@@ -195,7 +230,10 @@
 
         function loadLatestValues() {
             var metrics = ['humidity', 'temperature', 'relayIsPowered'];
-            var rows = '';
+            // Rows are stored by index so the table order stays fixed
+            // regardless of which request finishes first.
+            var rows = [];
+            var completed = 0;
 
             $.each(metrics, function(index, metric) {
                 beginBackendRequest();
@@ -204,7 +242,7 @@
                     crossDomain: true,
                     dataType: 'json',
                     data: {
-                        q: query,
+                        q: '',
                         collection: metric
                     }
                 }).done(function (json) {
@@ -215,70 +253,72 @@
                     var latestValue = latestRow !== null ? data.getValue(latestRow, 1) : null;
                     var latestDate = latestRow !== null ? data.getValue(latestRow, 0) : null;
 
-                    rows += '<tr>' +
+                    rows[index] = '<tr>' +
                         '<th scope="row"><span class="metric-pill"><span class="metric-dot" style="background: ' + collectionColors[metric] + ';" aria-hidden="true"></span>' + collectionLabels[metric] + '</span></th>' +
                         '<td>' + formatCollectionValue(metric, latestValue) + '</td>' +
                         '<td>' + (latestDate ? moment(latestDate).format('DD.MM.YYYY HH:mm') : '–') + '</td>' +
                         '</tr>';
                 }).fail(function () {
-                    rows += '<tr>' +
+                    rows[index] = '<tr>' +
                         '<th scope="row"><span class="metric-pill"><span class="metric-dot" style="background: ' + collectionColors[metric] + ';" aria-hidden="true"></span>' + collectionLabels[metric] + '</span></th>' +
                         '<td>–</td>' +
                         '<td>–</td>' +
                         '</tr>';
                 }).always(function () {
                     endBackendRequest();
-                    if (index === metrics.length - 1) {
-                        $('#latest-values tbody').html(rows);
+                    completed += 1;
+                    if (completed === metrics.length) {
+                        $('#latest-values tbody').html(rows.join(''));
                     }
                 });
             });
         }
 
-        function setBackButtonText(text) {
-            $('#back').text(text || '');
+        function monthName(offset) {
+            return moment().add(offset, 'month').format('MMMM');
         }
 
-        function setForwardButtonText(text) {
-            $('#forward').text(text || '');
+        // Derives the query and both button labels from monthOffset.
+        function updateNavigation() {
+            query = monthOffset === 0 ? '' : moment().add(monthOffset, 'month').format('YYYY-MM-DD');
+            $('#period-label').text(moment().add(monthOffset, 'month').format('MMMM YYYY'));
+            $('#back').text(monthName(monthOffset - 1));
+            $('#forward')
+                .text(monthOffset < 0 ? monthName(monthOffset + 1) : '')
+                .prop('disabled', monthOffset >= 0);
+        }
+
+        function navigateTo(offset) {
+            monthOffset = Math.min(0, offset);
+            updateNavigation();
+            drawChart();
         }
 
         $(document).ready(function () {
+            var resizeTimer = null;
             $(window).resize(function () {
-                if (google && google.visualization) {
-                    drawChart();
-                }
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(renderChart, 150);
             });
 
             $('#back').click(function () {
-                if (query) {
-                    query = moment(new Date(query)).subtract(1, 'month').format('YYYY-MM-DD');
-                    setBackButtonText(moment(new Date(query)).format('MMMM'));
-                } else {
-                    setBackButtonText(moment(new Date()).subtract(2, 'month').format('MMMM'));
-                    setForwardButtonText(moment(new Date()).add(1, 'month').format('MMMM'));
-                    query = moment(new Date()).subtract(1, 'month').format('YYYY-MM-DD');
-                }
-                drawChart();
+                navigateTo(monthOffset - 1);
             });
 
             $('#forward').click(function () {
-                query = moment(new Date(query)).add(1, 'month').format('YYYY-MM-DD');
-                setForwardButtonText(moment(new Date(query)).format('MMMM'));
-                drawChart();
+                navigateTo(monthOffset + 1);
             });
 
             $('#recent').click(function () {
-                query = '';
-                setBackButtonText(moment(new Date()).subtract(1, 'month').format('MMMM'));
-                setForwardButtonText('');
-                drawChart();
+                navigateTo(0);
             });
 
-            setBackButtonText(moment(new Date()).subtract(1, 'month').format('MMMM'));
+            updateNavigation();
 
             $('#collection').change(function () {
                 collection = $(this).val();
+                chart = null;
+                chartData = null;
                 $('#chart_div').html('<span class="loading-indicator">Lade Daten...</span>');
                 drawChart();
             });
@@ -313,6 +353,7 @@
         </header>
 
         <section class="panel chart-card">
+            <p id="period-label" class="period-label" aria-live="polite"></p>
             <div class="chart-toolbar" aria-label="Monatsnavigation">
                 <button id="back" class="nav-btn" type="button" aria-label="Vorheriger Monat"></button>
                 <button id="recent" class="secondary-btn" type="button">Aktueller Monat</button>
